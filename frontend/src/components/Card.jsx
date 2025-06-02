@@ -39,7 +39,7 @@ const Card = ({ list, setList }) => {
             <div className="flex">
               <input type="checkbox" className="mb-2.5 mr-6" />
               <li className="list-none mb-3 font-black">
-                {item.toUpperCase()}
+                {item.description.toUpperCase()}
               </li>
             </div>
           );
