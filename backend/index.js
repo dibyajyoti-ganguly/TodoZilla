@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const express = require("express");
+const bcrypt = require("bcrypt");
 const { UserModel, TodoModel } = require("./db");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
@@ -25,24 +26,27 @@ app.post("/signup", validateAuthBody, async function (req, res) {
   const email = req.body.email;
   const password = req.body.password;
 
-  const user = auth_data.find((user) => user.email === email);
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  if (user) {
-    return res
-      .status(301)
-      .json("A user with the same credentials already exists");
+    const existingUser = await UserModel.findOne({ email: email });
+    if (existingUser) {
+      return res.status(409).json("A user with the same email already exists"); // 409 is more appropriate for conflicts
+    }
+
+    const newUser = await UserModel.create({
+      email: email,
+      password: hashedPassword,
+    });
+
+    const token = jwt.sign({ id: newUser._id.toString() }, JWT_SECRET);
+    res.status(200).json({
+      message: "User created successfully",
+      token: token,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
   }
-
-  await UserModel.create({
-    email: email,
-    password: password,
-  });
-
-  const token = jwt.sign({ email }, JWT_SECRET);
-  res.status(200).json({
-    message: "User created successfully",
-    token: token,
-  });
 });
 
 app.post("/signin", validateAuthBody, async (req, res) => {
@@ -51,12 +55,14 @@ app.post("/signin", validateAuthBody, async (req, res) => {
 
   const user = await UserModel.findOne({
     email: email,
-    password: password,
   });
 
   if (!user) return res.status(301).json("User with the given email not found");
 
-  //console.log(user);
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    return res.status(401).json({ error: "Invalid email or password" });
+  }
 
   const token = jwt.sign({ id: user._id.toString() }, JWT_SECRET);
   res.status(200).json({
