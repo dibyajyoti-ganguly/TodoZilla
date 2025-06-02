@@ -1,18 +1,11 @@
 require("dotenv").config();
 
 const express = require("express");
+const { UserModel, TodoModel } = require("./db");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET;
 const app = express();
-
-const auth_data = [
-  {
-    email: "jdoe9@gmail.com",
-    password: "1234",
-    items: ["Get up", "Brush teeth", "Breakfast", "Code"],
-  },
-];
 
 app.use(cors());
 
@@ -28,7 +21,7 @@ const validateAuthBody = (req, res, next) => {
   next();
 };
 
-app.post("/signup", validateAuthBody, (req, res) => {
+app.post("/signup", validateAuthBody, async function (req, res) {
   const email = req.body.email;
   const password = req.body.password;
 
@@ -40,30 +33,32 @@ app.post("/signup", validateAuthBody, (req, res) => {
       .json("A user with the same credentials already exists");
   }
 
-  auth_data.push({
+  await UserModel.create({
     email: email,
     password: password,
-    items: [],
   });
+
   const token = jwt.sign({ email }, JWT_SECRET);
   res.status(200).json({
     message: "User created successfully",
     token: token,
   });
-  console.log(auth_data);
 });
 
-app.post("/signin", validateAuthBody, (req, res) => {
+app.post("/signin", validateAuthBody, async (req, res) => {
   const email = req.body.email;
   const password = req.body.password;
 
-  const user = auth_data.find(
-    (user) => user.email === email && user.password === password
-  );
+  const user = await UserModel.findOne({
+    email: email,
+    password: password,
+  });
 
   if (!user) return res.status(301).json("User with the given email not found");
 
-  const token = jwt.sign({ email }, JWT_SECRET);
+  //console.log(user);
+
+  const token = jwt.sign({ id: user._id.toString() }, JWT_SECRET);
   res.status(200).json({
     message: "User logged in",
     token: token,
@@ -72,33 +67,45 @@ app.post("/signin", validateAuthBody, (req, res) => {
 
 function auth(req, res, next) {
   const token = req.headers.authorization;
-  const decoded = jwt.verify(token, JWT_SECRET);
 
-  if (!decoded) res.status(301).json("User not logged in");
-  else {
-    req.email = decoded.email;
+  if (!token) res.status(401).json("Token not provided");
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    console.log(decoded);
+    req.userId = decoded.id;
     next();
+  } catch (err) {
+    console.error("JWT Verification failed:", err.message);
+    return res.status(401).json("Invalid token...access denied");
   }
 }
 
-app.get("/todo", auth, (req, res) => {
-  const user = auth_data.find((user) => user.email === req.email);
+app.get("/todo", auth, async (req, res) => {
+  const todos = await TodoModel.find({
+    userId: req.userId,
+  });
 
-  if (!user) return res.status(301).json("Invalid token");
+  if (!todos) return res.status(301).json("Check the token again");
 
-  res.status(200).json(user.items);
+  res.status(200).json(todos);
 });
 
-app.post("/addItem", auth, (req, res) => {
-  const user = auth_data.find((user) => user.email === req.email);
+app.post("/addItem", auth, async (req, res) => {
+  const userId = req.userId;
 
-  if (!user) return res.status(301).json("Invalid token");
+  await TodoModel.create({
+    description: req.body.item,
+    userId: userId,
+  });
 
-  user.items.push(req.body.item);
+  const todos = await TodoModel.find({
+    userId: userId,
+  });
 
-  console.log(user.items);
+  console.log(todos);
 
-  res.status(200).json(user.items);
+  res.status(200).json(todos);
 });
 
 app.listen(3000);

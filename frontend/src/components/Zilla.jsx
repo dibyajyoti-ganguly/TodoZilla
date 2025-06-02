@@ -14,7 +14,7 @@ const Zilla = () => {
         const response = await fetch("http://localhost:3000/todo", {
           headers: {
             "Content-Type": "application/json",
-            Authorization: token,
+            Authorization: `${token}`,
           },
         });
 
