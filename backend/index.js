@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const bcrypt = require("bcrypt");
+const { z } = require("zod");
 const { UserModel, TodoModel } = require("./db");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
@@ -18,6 +19,19 @@ const validateAuthBody = (req, res, next) => {
 
   if (!email || !password)
     return res.status(301).json("Email or Password cannot be empty");
+
+  const User = z.object({
+    email: z.string().min(3).max(100).email(),
+    password: z.string().min(3).max(100),
+  });
+
+  const parsedDatawithSuccess = User.safeParse(req.body);
+
+  if (!parsedDatawithSuccess.success)
+    return res.status(401).json({
+      message: "Incorrect format",
+      error: parsedDatawithSuccess.error.issues[0].message,
+    });
 
   next();
 };
@@ -74,7 +88,7 @@ app.post("/signin", validateAuthBody, async (req, res) => {
 function auth(req, res, next) {
   const token = req.headers.authorization;
 
-  if (!token) res.status(401).json("Token not provided");
+  if (!token) return res.status(401).json("Token not provided");
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
@@ -88,8 +102,10 @@ function auth(req, res, next) {
 }
 
 app.get("/todo", auth, async (req, res) => {
+  const userId = req.userId;
+
   const todos = await TodoModel.find({
-    userId: req.userId,
+    userId: userId,
   });
 
   if (!todos) return res.status(301).json("Check the token again");
